@@ -35,7 +35,7 @@ for doi in dois:
 
     details += "Title:" + title + ", Year:" + str(year) + ", Citations:" + str(citation_count) + "\n"
 
-genai.configure(api_key="AIzaSyA6IZvzdN0vumWiCOAiKC1V84oej1pnB_A")
+genai.configure(api_key="xxxx")
 flash = genai.GenerativeModel('gemini-1.5-flash')
 
 paper_names = [
