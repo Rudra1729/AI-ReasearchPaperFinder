@@ -42,8 +42,8 @@ def summarize_research_paper(api_key: str, paper_content: str) -> str:
         return f"An error occurred: {str(e)}"
 
 # Test Function
-if __name__ == "__main__":
-    api_key = "AIzaSyCltlvD2095OCXy1P8PzlTynoO9NIsUCaQ"  
+#if __name__ == "__main__":
+#    api_key = "AIzaSyCltlvD2095OCXy1P8PzlTynoO9NIsUCaQ"  
 #    paper_content = """
 #     Title: Advances in Artificial Intelligence for Medical Diagnosis
 
