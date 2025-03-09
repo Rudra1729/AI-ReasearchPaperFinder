@@ -3,26 +3,32 @@ from flask_cors import CORS  # Import CORS for cross-origin requests
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
-from API_KEY import API_KEY
-from Search_Papers import search_most_cited_papers
+#from API_KEY import API_KEY
 
 # Load environment variables
 load_dotenv()
 
 # Configure the API key
-genai.configure(api_key=API_KEY)
+genai.configure(api_key="API_KEY")
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Function to generate a short query
 def generate_short_query(long_prompt):
-    query_prompt = f"""Given the following long prompt, generate a concise 5-10 word query that captures the main topic for searching on Google Scholar:
+    
+    # Generate the query prompt
+    query_prompt = f"""Given the following long prompt, generate a concise 5-10 word query that captures the main topic using only important keywords or meaningful phrases directly from the prompt:
 
 Long Prompt: {long_prompt}
+If the Long Prompt is less than 10 words, then just return the Long Prompt only as the short query as it is already short. Do not generate a short query.
 
 Short Query (5-10 words):"""
 
+    # Generate content using the model
+    response = model.generate_content(query_prompt)
+    
+    # Return the generated short query
     response = genai.GenerativeModel(
         'gemini-1.5-flash-latest',
         generation_config=genai.GenerationConfig(
@@ -34,6 +40,8 @@ Short Query (5-10 words):"""
     
     return response.text.strip()
 
+
+#print(generate_short_query("artificial intelligence."))
 @app.route("/search", methods=["POST"])
 def search_papers():
     try:
