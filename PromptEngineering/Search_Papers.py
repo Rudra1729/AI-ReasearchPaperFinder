@@ -15,10 +15,11 @@ def search_most_cited_papers(query, num_results=5):
     # Sort papers by citation count in descending order
     sorted_papers = sorted(papers, key=lambda x: x[1], reverse=True)
     
+    # Format results for rendering in Flask
+    formatted_results = []
     for i, (paper, citations) in enumerate(sorted_papers, 1):
-        print(f"{i}. {paper['bib']['title']}")
-        print(f"   Citations: {citations}")
-        print(f"   URL: {paper.get('pub_url', 'N/A')}")
-        print("-")
-
-
+        title = paper['bib']['title']
+        url = paper.get('pub_url', 'N/A')
+        formatted_results.append(f"{i}. {title}\n   Citations: {citations}\n   URL: {url}")
+    
+    return formatted_results
