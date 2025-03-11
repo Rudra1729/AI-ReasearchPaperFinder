@@ -1,26 +1,56 @@
-import React from "react";
-import "./SearchBar.css";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-const SearchBar = () => (
-  <div className="search-box">
-    <h2>Search for Research Papers</h2>
-    <p>Enter a topic, question, or research area</p>
-    <div className="search-inputs">
-      <input type="text" placeholder="e.g., 'Effects of climate change on marine ecosystems'" />
-      <select>
-        <option>All Papers</option>
-      </select>
+const SearchBar = () => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const navigate = useNavigate();
+
+  const handleInputChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const handleSearch = async () => {
+    console.log("Searching for:", searchTerm);
+
+    try {
+      const response = await fetch("http://127.0.0.1:5000/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ searchTerm }),
+      });
+
+      const data = await response.json();
+      console.log("Python Response:", data);
+
+      if (data.results) {
+        // Store results in localStorage (as JSON)
+        localStorage.setItem("searchResult", JSON.stringify(data.results));
+        navigate("/research");
+      }
+    } catch (error) {
+      console.error("Error sending data to Python:", error);
+    }
+  };
+
+  return (
+    <div className="search-box">
+      <h2>Search for Research Papers</h2>
+      <p>Enter a research area</p>
+      <div className="search-inputs">
+        <input
+          type="text"
+          placeholder="Enter a research paper area"
+          value={searchTerm}
+          onChange={handleInputChange}
+        />
+        <button className="search-button" onClick={handleSearch}>
+          Search Papers
+        </button>
+      </div>
     </div>
-    <div className="filter-options">
-      <select>
-        <option>Relevance</option>
-      </select>
-      <select>
-        <option>Last 5 years</option>
-      </select>
-      <button className="search-button">Search Papers</button>
-    </div>
-  </div>
-);
+  );
+};
 
 export default SearchBar;
