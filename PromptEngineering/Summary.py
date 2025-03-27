@@ -1,3 +1,6 @@
+'''
+This file summarizes the research paper with prompt engineering rn, but will have to implement RAG.
+'''
 import requests
 import json
 
