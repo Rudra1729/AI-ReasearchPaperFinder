@@ -1,3 +1,7 @@
+'''
+Compares Papers using details like title, citation count and year published and asks Gemini Model to rank them on their influence.
+Will need to add the ranking part in a function and possible fine-tune it.
+'''
 import google.generativeai as genai
 from IPython.display import HTML, Markdown, display
 import sys
