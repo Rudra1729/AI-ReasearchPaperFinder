@@ -1,3 +1,7 @@
+"""This file contains the code for generating a short query for schematic using prompt engineering.
+Function: generate_short_query(long_prompt_string)--> returns shortened prompt.
+"""
+
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
