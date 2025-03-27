@@ -1,3 +1,7 @@
+"""this file has code which gets the most cited research paper and sorts them.
+Function: 
+    search_most_cited_papers(the_prompt, num_of_results)--> sorted dictionaries
+"""
 from scholarly import scholarly
 
 def search_most_cited_papers(query, num_results=5):
