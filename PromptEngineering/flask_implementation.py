@@ -92,7 +92,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS  # Import CORS
 from Research_paper_function import generate_short_query
-from Search_Papers import search_most_cited_papers
+from Search_Papers_Arvix import search_arxiv_papers
 
 app = Flask(__name__)
 
@@ -112,7 +112,7 @@ def home():
     short_query = generate_short_query(long_prompt)
     
     # Get the search results using the modified search_most_cited_papers function
-    results = search_most_cited_papers(short_query)
+    results = search_arxiv_papers(short_query)
     
     # Return results as JSON instead of rendering HTML
     return jsonify({"results": results, "user_prompt": long_prompt})
