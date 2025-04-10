@@ -1,33 +1,34 @@
-"""Downloads PDFs from arXiv links and saves them locally.
-    
-    Args:
-        papers (list): List of dictionaries with 'title' and 'url' keys
-        save_dir (str): Target directory for PDF storage (default: current dir)
-    """
+"""
+    Downloads a PDF from an arXiv link and saves it locally.
 
+    Args:
+        arxiv_url (str): The URL of the arXiv paper (e.g., https://arxiv.org/abs/1234.56789)
+        save_dir (str): Directory to save the downloaded PDF (default: current directory)
+    """
 import requests
 import os
-from pathvalidate import sanitize_filename  # Optional for safer filenames
+from urllib.parse import urlparse
+from pathvalidate import sanitize_filename  # install via: pip install pathvalidate
 
-def download_arxiv_pdfs(papers, save_dir="."):
-
+def download_arxiv_pdf(arxiv_url, save_dir="."):
     os.makedirs(save_dir, exist_ok=True)
     
-    for paper in papers:
-        title = paper['title']
-        pdf_url = f"{paper['url']}.pdf"  # Ensure .pdf extension
-        filename = sanitize_filename(title[:150]) + ".pdf"  # Truncate long titles
+    # Extract identifier or fallback to using full URL
+    try:
+        arxiv_id = arxiv_url.rstrip('/').split('/')[-1]
+        filename = sanitize_filename(arxiv_id) + ".pdf"
+        pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
         
-        try:
-            response = requests.get(pdf_url, allow_redirects=True)
-            response.raise_for_status()
-            
-            full_path = os.path.join(save_dir, filename)
-            with open(full_path, 'wb') as f:
-                f.write(response.content)
-            
-            print(f"✅ Success: {filename}")
-        except Exception as e:
-            print(f"❌ Failed: {title} - {str(e)}")
+        response = requests.get(pdf_url, allow_redirects=True)
+        response.raise_for_status()
 
-#download_arxiv_pdfs(papers)
+        full_path = os.path.join(save_dir, filename)
+        with open(full_path, 'wb') as f:
+            f.write(response.content)
+
+        print(f"✅ Downloaded: {filename}")
+        return full_path
+    except Exception as e:
+        print(f"❌ Failed to download from {arxiv_url} - {e}")
+        return None
+
