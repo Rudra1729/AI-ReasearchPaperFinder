@@ -117,5 +117,13 @@ def home():
     # Return results as JSON instead of rendering HTML
     return jsonify({"results": results, "user_prompt": long_prompt})
 
+@app.route('/log-click', methods=['POST'])
+def log_click():
+    data = request.get_json()
+    print(f"User clicked on: {data['title']} - {data['url']}")
+    
+    # Optional: save to a file, database, or further processing
+    return jsonify({"message": "Click logged successfully"}), 200
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
