@@ -117,9 +117,13 @@ def home():
     # Return results as JSON instead of rendering HTML
     return jsonify({"results": results, "user_prompt": long_prompt})
 
+link = "https://arxiv.org/pdf/2504.07136"
+
 @app.route('/log-click', methods=['POST'])
 def log_click():
     data = request.get_json()
+    global link
+    link  = data['url']
     print(f"User clicked on: {data['title']} - {data['url']}")
     
     # Optional: save to a file, database, or further processing
