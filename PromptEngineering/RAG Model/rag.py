@@ -83,3 +83,22 @@ def get_contextual_definition(highlighted_text):
 for highlighted_text in clipboard_highight_monitor():
     print(get_contextual_definition(highlighted_text))
 '''
+chroma_client = chromadb.Client()
+
+def reload_rag_model(pdf_path="PromptEngineering/RAG Model/Research.pdf"):
+    global db
+
+    # Drop the existing collection
+    chroma_client.delete_collection("googlecardb")
+
+    # Recreate a fresh one
+    db = chroma_client.get_or_create_collection(
+        name="googlecardb", embedding_function=GeminiEmbeddingFunction()
+    )
+
+    topic_text_dict = extract_sections(pdf_path)
+    documents = create_documents_from_dict(topic_text_dict)
+
+    db.add(documents=documents, ids=[str(i) for i in range(len(documents))])
+    print("✅ RAG model reset and reloaded from updated PDF.")
+

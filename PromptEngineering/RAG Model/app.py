@@ -4,13 +4,13 @@ from flask import Flask, render_template_string, jsonify, request
 import fitz  # PyMuPDF
 import base64
 import os
-from rag import get_contextual_definition
+import rag
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pdf_from_link import download_arxiv_pdf
-from flask_implementation import link
+import flask_implementation
 
 app = Flask(__name__)
 
@@ -18,7 +18,7 @@ app = Flask(__name__)
 def process_text(selection):
     """Example processing function - modify this as needed"""
     return {
-        "analysis": get_contextual_definition(selection)
+        "analysis": rag.get_contextual_definition(selection)
     }
 
 def pdf_to_images(pdf_path):
@@ -58,6 +58,17 @@ def handle_selection():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+from rag import reload_rag_model
+
+@app.route('/reload-rag', methods=['POST'])
+def reload_rag():
+    try:
+        reload_rag_model()  # Use the updated PDF path
+        return jsonify({"status": "success", "message": "RAG model reloaded."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route('/')
 def pdf_viewer():
@@ -187,9 +198,13 @@ def pdf_viewer():
     ''', pages=pages)
 
 if __name__ == '__main__':
-    result = download_arxiv_pdf(link)
+    result = download_arxiv_pdf(flask_implementation.link)
     if not result or not os.path.exists(result):
         print("❌ Could not download the PDF. Exiting Flask server startup.")
         exit(1)
+
+    from rag import reload_rag_model
+    reload_rag_model()
+
     app.run(host='0.0.0.0', port=5001, debug=True)
 
