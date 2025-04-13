@@ -124,6 +124,7 @@ def log_click():
     data = request.get_json()
     global link
     link  = data['url']
+    print(link)
     print(f"User clicked on: {data['title']} - {data['url']}")
     
     # Optional: save to a file, database, or further processing

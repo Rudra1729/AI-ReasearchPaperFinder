@@ -70,7 +70,9 @@ def get_contextual_definition(highlighted_text):
 
     2. Other Use cases
     Give me the answer in a paragraph with two headings Operational context and other use-cases. Make sure that each of these paragraphs do not exceed 50 words.
-    Passage: {passage.replace('\n', ' ')}"""
+    Passage: """
+
+    # {passage.replace('\n', ' ')}
     
     # Generate and return answer
     model = genai.GenerativeModel("gemini-1.5-flash-latest")
@@ -103,22 +105,21 @@ def reload_rag_model(pdf_path="PromptEngineering/RAG Model/Research.pdf"):
     print("✅ RAG model reset and reloaded from updated PDF.")
 
 
-def chat_with_doc(user_question):
-    # Clean the input
-    query = user_question.strip()
+# def chat_with_doc(user_question):
+#     # Clean the input
+#     query = user_question.strip()
 
-    # Query ChromaDB for relevant context
-    results = db.query(query_texts=[query], n_results=1)
-    [[passage]] = results["documents"]
+#     # Query ChromaDB for relevant context
+#     results = db.query(query_texts=[query], n_results=1)
+#     [[passage]] = results["documents"]
 
-    # Chat-style prompt
-    prompt = f"""You are a helpful and friendly assistant that answers questions based on the technical document. 
-Answer casually and clearly, but stay factually accurate and refer only to the passage. 
-Here is the passage: {passage.replace('\n', ' ')}
-Question: {query}
-Answer:"""
+#     # Chat-style prompt
+#     prompt = f"""You are a helpful and friendly assistant that answers questions based on the technical document. 
+# Answer casually and clearly, but stay factually accurate and refer only to the passage. 
+# Here is the passage: {passage.replace('\n', ' ')}
+# Question: {query}
+# Answer:"""
 
-    model = genai.GenerativeModel("gemini-1.5-flash-latest")
-    response = model.generate_content(prompt)
-    return response.text
-
+#     model = genai.GenerativeModel("gemini-1.5-flash-latest")
+#     response = model.generate_content(prompt)
+#     return response.text
