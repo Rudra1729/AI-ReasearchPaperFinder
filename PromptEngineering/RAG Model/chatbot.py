@@ -1,4 +1,4 @@
-from rag import get_contextual_definition  # Reusing your RAG function
+from rag import chat_with_doc  # Reusing your RAG function
 
 def start_chat():
     print("Welcome to the RAG-powered Chatbot! You can ask questions about your research document.")
@@ -14,7 +14,7 @@ def start_chat():
         
         # Get the response from RAG
         try:
-            response = get_contextual_definition(user_input)
+            response = chat_with_doc(user_input)
             print(f"\nAnswer: {response}")
         except Exception as e:
             print(f"Error: {e}. Please try again.")
