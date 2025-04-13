@@ -9,10 +9,19 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from pdf_from_link import download_arxiv_pdf
+import threading
+import time
+import importlib
 import flask_implementation
 
+
+from pdf_from_link import download_arxiv_pdf
+
 app = Flask(__name__)
+current_pdf_link = flask_implementation.link
+current_pdf_path = download_arxiv_pdf(current_pdf_link)
+ # Global variable to store the current PDF link
+
 
 # Custom text processing function (built-in for single-file solution)
 def process_text(selection):
@@ -45,6 +54,19 @@ def pdf_to_images(pdf_path):
         print(f"PDF Processing Error: {str(e)}")
         return []
 
+def monitor_link_changes():
+    global current_pdf_link, current_pdf_path
+    while True:
+        time.sleep(5)  # Check every 5 seconds
+        importlib.reload(flask_implementation)
+        new_link = flask_implementation.link
+        if new_link != current_pdf_link:
+            print(f"Detected change in link: {new_link}")
+            current_pdf_link = new_link
+            current_pdf_path = download_arxiv_pdf(current_pdf_link)
+            reload_rag_model()
+
+
 @app.route('/process-selection', methods=['POST'])
 def handle_selection():
     try:
@@ -68,12 +90,44 @@ def reload_rag():
         return jsonify({"status": "success", "message": "RAG model reloaded."})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+
+@app.route('/update-pdf', methods=['POST'])
+def update_pdf():
+    global current_pdf_link
+    try:
+        data = request.get_json()
+        new_link = data.get("link")
+
+        if not new_link:
+            return jsonify({"error": "Missing 'link' in request data"}), 400
+
+        # Download the new PDF
+        result = download_arxiv_pdf(new_link)
+        if not result or not os.path.exists(result):
+            return jsonify({"error": "Failed to download PDF"}), 500
+
+        # Update the global link variable
+        current_pdf_link = new_link
+
+        # Reload the RAG model with the new PDF
+        reload_rag_model()
+
+        return jsonify({"message": "PDF and model updated successfully"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 @app.route('/')
 def pdf_viewer():
-    pdf_path = "PromptEngineering/RAG Model/Research.pdf"
-    pages = pdf_to_images(pdf_path)
+    global current_pdf_link
+    if not current_pdf_link:
+        return render_template_string('<h1>No PDF link provided.</h1>')
+
+    pdf_path = download_arxiv_pdf(current_pdf_link)
+    pages = pdf_to_images(current_pdf_path)
     
     if not pages:
         return render_template_string('''
@@ -205,6 +259,6 @@ if __name__ == '__main__':
 
     from rag import reload_rag_model
     reload_rag_model()
-
+    threading.Thread(target=monitor_link_changes, daemon=True).start()
     app.run(host='0.0.0.0', port=5001, debug=True)
 

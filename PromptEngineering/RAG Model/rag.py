@@ -19,7 +19,7 @@ def create_documents_from_dict(topic_text_dict):
     
     return documents
 
-topic_text_dict = extract_sections("AI-ReasearchPaperFinder/PromptEngineering/RAG Model/Research.pdf")
+topic_text_dict = extract_sections("PromptEngineering/RAG Model/Research.pdf")
 # Generate list of documents
 documents = create_documents_from_dict(topic_text_dict)
 
