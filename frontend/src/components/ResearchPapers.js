@@ -20,15 +20,18 @@ const Research = () => {
       },
       body: JSON.stringify(paper), // Send title and url
     })
-    .then(response => response.json())
-  .then(data => {
-    console.log("Successfully sent to backend:", data);
-  })
-  .catch(error => {
-    console.error("Error sending to backend:", error);
-  });
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Successfully sent to backend:", data);
+        
+        // Redirect to Flask server (PDF analyzer app, for example)
+        window.location.href = "http://localhost:5001/";
+      })
+      .catch((error) => {
+        console.error("Error sending to backend:", error);
+      });
   };
-
+  
   return (
     <div className="research-container">
       <h2>Research Paper Results</h2>

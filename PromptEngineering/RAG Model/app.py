@@ -57,7 +57,6 @@ def pdf_to_images(pdf_path):
 def monitor_link_changes():
     global current_pdf_link, current_pdf_path
     while True:
-        time.sleep(5)  # Check every 5 seconds
         importlib.reload(flask_implementation)
         new_link = flask_implementation.link
         if new_link != current_pdf_link:
