@@ -13,24 +13,39 @@ const Research = () => {
 
 
   const handleLinkClick = (paper) => {
-    fetch("http://localhost:5000/log-click", {
+    // Step 1: Log the click
+    fetch("http://localhost:5050/log-click", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(paper), // Send title and url
+      body: JSON.stringify(paper),
     })
       .then((response) => response.json())
       .then((data) => {
-        console.log("Successfully sent to backend:", data);
-        
-        // Redirect to Flask server (PDF analyzer app, for example)
+        console.log("Click logged:", data);
+  
+        // Step 2: Now tell Flask to update the PDF and reload the model
+        return fetch("http://localhost:5001/update-pdf", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ link: paper.url }),
+        });
+      })
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("PDF/model update response:", data);
+  
+        // Step 3: Redirect to the PDF viewer
         window.location.href = "http://localhost:5001/";
       })
       .catch((error) => {
-        console.error("Error sending to backend:", error);
+        console.error("Error during click or PDF update:", error);
       });
   };
+  
   
   return (
     <div className="research-container">

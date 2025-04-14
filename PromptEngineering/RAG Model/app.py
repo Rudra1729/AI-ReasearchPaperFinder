@@ -7,6 +7,7 @@ import os
 import rag
 import sys
 import os
+from flask_cors import CORS
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import threading
@@ -18,6 +19,8 @@ import flask_implementation
 from pdf_from_link import download_arxiv_pdf
 
 app = Flask(__name__)
+CORS(app)  # Allow all origins during dev (not for prod)
+
 current_pdf_link = flask_implementation.link
 current_pdf_path = download_arxiv_pdf(current_pdf_link)
  # Global variable to store the current PDF link
@@ -91,9 +94,12 @@ def reload_rag():
         return jsonify({"status": "error", "message": str(e)}), 500
     
 
-@app.route('/update-pdf', methods=['POST'])
+@app.route('/update-pdf', methods=['POST', 'OPTIONS'])
 def update_pdf():
-    global current_pdf_link
+    if request.method == "OPTIONS":
+        # Handle CORS preflight
+        return '', 200
+
     try:
         data = request.get_json()
         new_link = data.get("link")
@@ -106,11 +112,9 @@ def update_pdf():
         if not result or not os.path.exists(result):
             return jsonify({"error": "Failed to download PDF"}), 500
 
-        # Update the global link variable
+        global current_pdf_link
         current_pdf_link = new_link
-
-        # Reload the RAG model with the new PDF
-        reload_rag_model()
+        reload_rag_model(current_pdf_path)
 
         return jsonify({"message": "PDF and model updated successfully"}), 200
 
@@ -119,13 +123,15 @@ def update_pdf():
 
 
 
+
 @app.route('/')
 def pdf_viewer():
-    global current_pdf_link
+    global current_pdf_link, current_pdf_path
     if not current_pdf_link:
         return render_template_string('<h1>No PDF link provided.</h1>')
 
-    pdf_path = download_arxiv_pdf(current_pdf_link)
+    # Download the PDF again (optional: can check if already downloaded)
+    current_pdf_path = download_arxiv_pdf(current_pdf_link)
     pages = pdf_to_images(current_pdf_path)
     
     if not pages:
@@ -138,7 +144,7 @@ def pdf_viewer():
                 <li>File is not password protected</li>
                 <li>File is a valid PDF document</li>
             </ul>
-        ''', pdf_path=os.path.abspath(pdf_path))
+        ''', pdf_path=os.path.abspath(current_pdf_path))
     
     return render_template_string('''
     <!DOCTYPE html>
@@ -251,12 +257,20 @@ def pdf_viewer():
     ''', pages=pages)
 
 if __name__ == '__main__':
-    result = download_arxiv_pdf(flask_implementation.link)
-    if not result or not os.path.exists(result):
+    # Ensure the initial link is downloaded and model is loaded
+    current_pdf_link = flask_implementation.link
+    current_pdf_path = download_arxiv_pdf(current_pdf_link)
+
+    if not current_pdf_path or not os.path.exists(current_pdf_path):
         print("❌ Could not download the PDF. Exiting Flask server startup.")
         exit(1)
 
     from rag import reload_rag_model
-    reload_rag_model()
-    threading.Thread(target=monitor_link_changes, daemon=True).start()
+    reload_rag_model(current_pdf_path)
+
+
+    # Optional: remove this if you're now using /update-pdf instead
+    # threading.Thread(target=monitor_link_changes, daemon=True).start()
+
     app.run(host='0.0.0.0', port=5001, debug=True)
+

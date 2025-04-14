@@ -55,24 +55,32 @@ db = chroma_client.get_or_create_collection(name="googlecardb", embedding_functi
 db.add(documents=documents, ids=[str(i) for i in range(len(documents))])
 
 def get_contextual_definition(highlighted_text):
-    # Get user input
-    
     search_term = highlighted_text.strip()
-    
-    # Query ChromaDB
+    print(f"🔍 Looking up: '{search_term}'")
+
     results = db.query(query_texts=[search_term], n_results=1)
+
+    if not results["documents"] or not results["documents"][0]:
+        print("⚠️ No relevant passage found. Returning fallback.")
+        return f"❌ No relevant passage found for '{search_term}'. Please try a more specific phrase."
+
     [[passage]] = results["documents"]
+
+    print(f"📚 Found passage: {passage[:200]}...")
     
     # Create explanation prompt
     prompt = f"""Explain the specific meaning and context of the term '{search_term}' 
-    based EXCLUSIVELY on this technical document passage and give a properly structured answer with proper line spacing and framework. Include:
-    1. Operational context
+based EXCLUSIVELY on this technical document passage and give a properly structured answer with proper line spacing and framework. Include:
 
-    2. Other Use cases
-    Give me the answer in a paragraph with two headings Operational context and other use-cases. Make sure that each of these paragraphs do not exceed 50 words.
-    Passage: """
+1. Operational context
 
-    # {passage.replace('\n', ' ')}
+2. Other Use cases
+
+Give me the answer in a paragraph with two headings 'Operational Context' and 'Other Use-cases'. Each paragraph should not exceed 50 words.
+
+Passage: {passage.replace('\n', ' ')}
+"""
+
     
     # Generate and return answer
     model = genai.GenerativeModel("gemini-1.5-flash-latest")
@@ -85,7 +93,6 @@ def get_contextual_definition(highlighted_text):
 for highlighted_text in clipboard_highight_monitor():
     print(get_contextual_definition(highlighted_text))
 '''
-chroma_client = chromadb.Client()
 
 def reload_rag_model(pdf_path="PromptEngineering/RAG Model/Research.pdf"):
     global db

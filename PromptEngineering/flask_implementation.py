@@ -90,36 +90,30 @@
 #     app.run(debug=True, port=5000)
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # Import CORS
+from flask_cors import CORS, cross_origin  # Import CORS
 from Research_paper_function import generate_short_query
 from Search_Papers_Arvix import search_arxiv_papers
 
 app = Flask(__name__)
-
-# Enable CORS for all routes
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}}, supports_credentials=True)
 
 @app.route("/search", methods=["POST"])
+@cross_origin()
 def home():
-    # Get user input from the request JSON
     data = request.get_json()
-
     searchTerm = data.get('searchTerm', '')
     long_prompt = searchTerm
     print("long term", long_prompt)
 
-    # Process the input using your functions
     short_query = generate_short_query(long_prompt)
-    
-    # Get the search results using the modified search_most_cited_papers function
     results = search_arxiv_papers(short_query)
     
-    # Return results as JSON instead of rendering HTML
     return jsonify({"results": results, "user_prompt": long_prompt})
 
 link = "https://arxiv.org/pdf/2504.07136"
 
 @app.route('/log-click', methods=['POST'])
+@cross_origin()
 def log_click():
     data = request.get_json()
     global link
@@ -127,8 +121,8 @@ def log_click():
     print(link)
     print(f"User clicked on: {data['title']} - {data['url']}")
     
-    # Optional: save to a file, database, or further processing
     return jsonify({"message": "Click logged successfully"}), 200
 
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5050)
