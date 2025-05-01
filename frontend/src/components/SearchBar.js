@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import "./SearchBar.css";
 
 const SearchBar = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,7 +48,7 @@ const SearchBar = () => {
         />
         <button className="search-button" onClick={handleSearch}>
           Search Papers
-        </button>
+        </button> 
       </div>
     </div>
   );
