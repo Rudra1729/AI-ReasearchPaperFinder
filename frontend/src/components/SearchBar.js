@@ -55,3 +55,7 @@ const SearchBar = () => {
 };
 
 export default SearchBar;
+
+<p>lorem
+  
+</p>
