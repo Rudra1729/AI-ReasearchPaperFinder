@@ -1,276 +1,302 @@
-# flask implementation.
+# === Full Flask App with Chatbot & Text Analysis (Enhanced UI with Toggle & Chat History) ===
 
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify, request, abort, url_for, send_file
+import subprocess
 import fitz  # PyMuPDF
 import base64
 import os
 import rag
 import sys
 import os
+from pathlib import Path
 from flask_cors import CORS
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-import threading
-import time
-import importlib
 import flask_implementation
-
-
 from pdf_from_link import download_arxiv_pdf
 
 app = Flask(__name__)
-CORS(app)  # Allow all origins during dev (not for prod)
+CORS(app)
 
+# ==== Global State ====
 current_pdf_link = flask_implementation.link
-current_pdf_path = download_arxiv_pdf(current_pdf_link)
- # Global variable to store the current PDF link
+downloaded_path   = download_arxiv_pdf(current_pdf_link)
+current_pdf_path  = str(Path(downloaded_path).resolve())
 
-
-# Custom text processing function (built-in for single-file solution)
+# ==== Utility / RAG Interface ====
 def process_text(selection):
-    """Example processing function - modify this as needed"""
-    return {
-        "analysis": rag.get_contextual_definition(selection)
-    }
+    return {"analysis": rag.get_contextual_definition(selection)}
 
-def pdf_to_images(pdf_path):
-    """Convert PDF to base64 images with error handling"""
-    try:
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"PDF file not found at {pdf_path}")
-            
-        doc = fitz.open(pdf_path)
-        pages = []
-        
-        for page in doc:
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            img_data = {
-                "image": base64.b64encode(pix.tobytes("png")).decode("utf-8"),
-                "width": pix.width,
-                "height": pix.height
-            }
-            pages.append(img_data)
-            
-        return pages
-        
-    except Exception as e:
-        print(f"PDF Processing Error: {str(e)}")
-        return []
-
-def monitor_link_changes():
-    global current_pdf_link, current_pdf_path
-    while True:
-        importlib.reload(flask_implementation)
-        new_link = flask_implementation.link
-        if new_link != current_pdf_link:
-            print(f"Detected change in link: {new_link}")
-            current_pdf_link = new_link
-            current_pdf_path = download_arxiv_pdf(current_pdf_link)
-            reload_rag_model()
-
+# ==== Routes ====
+@app.route('/pdf')
+def serve_pdf():
+    return send_file(current_pdf_path, mimetype='application/pdf')
 
 @app.route('/process-selection', methods=['POST'])
 def handle_selection():
+    data      = request.get_json(silent=True) or {}
+    selection = data.get('text', '').strip()
+    if not selection:
+        return jsonify({"error": "Empty selection"}), 400
     try:
-        data = request.json
-        selection = data.get('text', '').strip()
-        if not selection:
-            return jsonify({"error": "Empty selection"}), 400
-            
-        result = process_text(selection)
-        return jsonify(result)
-        
+        return jsonify(process_text(selection))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-from rag import reload_rag_model
 
-@app.route('/reload-rag', methods=['POST'])
-def reload_rag():
+@app.route('/ask', methods=['POST'])
+def ask_question():
+    data     = request.get_json(silent=True) or {}
+    question = data.get('question', '').strip()
+    if not question:
+        return jsonify({"error": "Question cannot be empty"}), 400
     try:
-        reload_rag_model()  # Use the updated PDF path
-        return jsonify({"status": "success", "message": "RAG model reloaded."})
+        answer = rag.chat_with_doc(question)
+        return jsonify({"answer": answer})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-    
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/update-pdf', methods=['POST', 'OPTIONS'])
 def update_pdf():
-    if request.method == "OPTIONS":
-        # Handle CORS preflight
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
         return '', 200
 
+    data = request.get_json(silent=True) or {}
+    new_link = data.get('link')
+    if not new_link:
+        return jsonify(error="Missing 'link' in request data"), 400
+
+    # Download — get back a path, which may be absolute or relative to CWD
+    downloaded = download_arxiv_pdf(new_link)
+    if not downloaded:
+        return jsonify(error="Download failed"), 500
+
+    # Resolve to an absolute path (but don’t prepend __file__ again)
+    abs_path = downloaded if os.path.isabs(downloaded) else os.path.abspath(downloaded)
+    if not os.path.isfile(abs_path):
+        return jsonify(error=f"PDF not found at {abs_path}"), 500
+
+    # Update globals and reload RAG
+    global current_pdf_link, current_pdf_path
+    current_pdf_link = new_link
+    current_pdf_path = abs_path
+    print("🗂  Now serving PDF from:", current_pdf_path)
+
     try:
-        data = request.get_json()
-        new_link = data.get("link")
-
-        if not new_link:
-            return jsonify({"error": "Missing 'link' in request data"}), 400
-
-        # Download the new PDF
-        result = download_arxiv_pdf(new_link)
-        if not result or not os.path.exists(result):
-            return jsonify({"error": "Failed to download PDF"}), 500
-
-        global current_pdf_link
-        current_pdf_link = new_link
-        reload_rag_model(current_pdf_path)
-
-        return jsonify({"message": "PDF and model updated successfully"}), 200
-
+        rag.reload_rag_model(current_pdf_path)
+        print("✅ RAG model reloaded successfully.")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print("❌ RAG reload error:", e, file=sys.stderr)
+        return jsonify(error=f"RAG reload error: {e}"), 500
 
-
-
+    return jsonify(message="PDF & model updated successfully"), 200
 
 @app.route('/')
 def pdf_viewer():
-    global current_pdf_link, current_pdf_path
-    if not current_pdf_link:
-        return render_template_string('<h1>No PDF link provided.</h1>')
-
-    # Download the PDF again (optional: can check if already downloaded)
-    current_pdf_path = download_arxiv_pdf(current_pdf_link)
-    pages = pdf_to_images(current_pdf_path)
-    
-    if not pages:
-        return render_template_string('''
-            <h1>Error Loading PDF</h1>
-            <p>Could not load PDF file at: {{ pdf_path }}</p>
-            <p>Check if:</p>
-            <ul>
-                <li>File exists at specified path</li>
-                <li>File is not password protected</li>
-                <li>File is a valid PDF document</li>
-            </ul>
-        ''', pdf_path=os.path.abspath(current_pdf_path))
-    
+    pdf_url = url_for('serve_pdf')
     return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>PDF Analyzer</title>
-        <style>
-            body { margin: 0; font-family: Arial, sans-serif; }
-            .container { display: flex; height: 100vh; }
-            .pdf-viewer { 
-                flex: 2; 
-                overflow-y: auto; 
-                padding: 20px;
-                background: #f0f0f0;
-            }
-            .analysis-panel {
-                flex: 1;
-                padding: 25px;
-                background: #ffffff;
-                box-shadow: -2px 0 15px rgba(0,0,0,0.1);
-            }
-            .page {
-                margin-bottom: 30px;
-                background: white;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }
-            .analysis-card {
-                background: #f8f9fa;
-                border-radius: 8px;
-                padding: 15px;
-                margin-bottom: 15px;
-            }
-            img { max-width: 100%; height: auto; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="pdf-viewer">
-                {% for page in pages %}
-                <div class="page">
-                    <img src="data:image/png;base64,{{ page.image }}" 
-                         style="width: {{ page.width//2 }}px; height: {{ page.height//2 }}px">
-                </div>
-                {% endfor %}
-            </div>
-            
-            <div class="analysis-panel">
-                <h2>Text Analysis</h2>
-                <div id="results">
-                    <div class="analysis-card" id="default-message">
-                        Select text in the PDF to see analysis results
-                    </div>
-                </div>
-            </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>PDF Analyzer & Chatbot</title>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f8f9fb; }
+    .container {
+      display: grid;
+      grid-template-columns: 2fr 1.8fr;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .pdf-viewer {
+      position: relative;
+      overflow-y: auto;
+      background: #f0f0f0;
+      padding: 10px 0 10px 30px;
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      padding: 0 20px;
+    }
+    .tabs { display: flex; margin-top: 10px; }
+    .tab-btn {
+      flex: 1; padding: 10px; text-align: center; cursor: pointer;
+      background: #e0e0e0; border: 1px solid #ccc; border-bottom: none;
+    }
+    .tab-btn.active { background: #fff; font-weight: bold; }
+    .tab-content {
+      flex: 1; border: 1px solid #ccc; border-top: none;
+      padding: 15px; overflow-y: auto;
+    }
+    .chat-input { display: flex; margin-top: 10px; }
+    .chat-input input {
+      flex: 1; padding: 10px; border: 1px solid #ccc;
+      border-radius: 6px 0 0 6px;
+    }
+    .chat-input button {
+      padding: 10px 20px; border: none; background: #007bff;
+      color: #fff; border-radius: 0 6px 6px 0; cursor: pointer;
+    }
+    .message { background: #e9ecef; border-radius: 8px;
+      padding: 10px; margin-bottom: 10px;
+    }
+    .bot-message { background: #d0ebff; }
+    /* PDF.js text-layer styles */
+    .page { position: relative; margin-bottom: 24px; }
+    .textLayer {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+    }
+    .textLayer span {
+      position: absolute; white-space: pre; transform-origin: 0 0;
+      color: transparent; pointer-events: all; cursor: text;
+    }
+    canvas { display: block; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="pdf-viewer" id="pdf-container"></div>
+    <div class="sidebar">
+      <div class="tabs">
+        <div class="tab-btn active" onclick="switchTab('analysis')">Text Analysis</div>
+        <div class="tab-btn" onclick="switchTab('chat')">Chatbot</div>
+      </div>
+      <div id="analysis" class="tab-content">
+        <div id="results">Select text in the PDF to see analysis results</div>
+      </div>
+      <div id="chat" class="tab-content" style="display:none">
+        <div id="chatHistory"></div>
+        <div class="chat-input">
+          <input id="chatInput" type="text" placeholder="Ask a question..."/>
+          <button onclick="askBot()">Ask</button>
         </div>
+      </div>
+    </div>
+  </div>
 
-        <script>
-            const resultsDiv = document.getElementById('results');
-            let currentSelection = '';
-            
-            async function updateAnalysis(selection) {
-                try {
-                    const response = await fetch('/process-selection', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({text: selection})
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if(data.error) {
-                        resultsDiv.innerHTML = `
-                            <div class="analysis-card error">
-                                Error: ${data.error}
-                            </div>
-                        `;
-                        return;
-                    }
-                    
-                    resultsDiv.innerHTML = `
-                        <div class="analysis-card">
-                            <h3>Selected Text:</h3>
-                            <p class="selection-preview">"${selection}"</p>
-                            <div class="analysis-results">
-                                <p>${data.analysis}</p>
-                            </div>
-                        </div>
-                    `;
-                    
-                } catch(error) {
-                    console.error('Analysis Error:', error);
-                    resultsDiv.innerHTML = `
-                        <div class="analysis-card error">
-                            Network Error: Could not get analysis
-                        </div>
-                    `;
-                }
-            }
+  <script>
+    const pdfUrl = "{{ pdf_url }}";
+    const container = document.getElementById('pdf-container');
+    const resultsDiv = document.getElementById('results');
+    let selectionDebounce = null;
+    let lastSent = '';
 
-            document.addEventListener('selectionchange', () => {
-                const selection = window.getSelection().toString().trim();
-                if(selection && selection !== currentSelection) {
-                    currentSelection = selection;
-                    updateAnalysis(selection);
-                }
+    // Tab switching
+    function switchTab(tab) {
+      document.getElementById('analysis').style.display = tab==='analysis'?'block':'none';
+      document.getElementById('chat').style.display     = tab==='chat'    ?'block':'none';
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelector('.tab-btn[onclick*="'+tab+'"]').classList.add('active');
+    }
+
+    // Send selection with debounce
+    function sendSelection(sel) {
+      if (!sel || sel === lastSent) return;
+      lastSent = sel;
+      fetch('/process-selection', {
+        method: 'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ text: sel })
+      })
+      .then(r=>r.json())
+      .then(data => {
+        resultsDiv.innerHTML = `
+          <div class="message bot-message">
+            <strong>Selected Text:</strong>
+            <p style="font-style:italic;color:#555;">${sel}</p>
+            <div style="margin-top:10px;">
+              ${ data.analysis
+                  .replace(/\*\*Operational Context\*\*/g,
+                           '<h4 style="margin:10px 0;color:#007bff">Operational Context</h4>')
+                  .replace(/\*\*Other Use-cases\*\*/g,
+                           '<h4 style="margin:10px 0;color:#007bff">Other Use-cases</h4>')
+              }
+            </div>
+          </div>`;
+      });
+    }
+
+    // Debounced selectionchange
+    document.addEventListener('selectionchange', () => {
+      clearTimeout(selectionDebounce);
+      selectionDebounce = setTimeout(() => {
+        const sel = window.getSelection().toString().trim();
+        sendSelection(sel);
+      }, 300);
+    });
+
+    // Also on mouseup for immediate send
+    document.addEventListener('mouseup', () => {
+      clearTimeout(selectionDebounce);
+      const sel = window.getSelection().toString().trim();
+      sendSelection(sel);
+    });
+
+    // Chatbot ask
+    function askBot() {
+      const q = document.getElementById('chatInput').value.trim();
+      if (!q) return;
+      document.getElementById('chatHistory').innerHTML +=
+        `<div class="message"><strong>You:</strong> ${q}</div>`;
+      document.getElementById('chatInput').value = '';
+      fetch('/ask',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({question:q})
+      })
+      .then(r=>r.json())
+      .then(d=>{
+        document.getElementById('chatHistory').innerHTML +=
+          `<div class="message bot-message"><strong>Bot:</strong> ${d.answer}</div>`;
+        const ch = document.getElementById('chatHistory');
+        ch.scrollTop = ch.scrollHeight;
+      });
+    }
+
+    // Render PDF.js pages + text layers
+    pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+      for (let i = 1; i <= pdf.numPages; i++) {
+        pdf.getPage(i).then(page => {
+          const scale    = 1.5;
+          const viewport = page.getViewport({scale});
+          const pageDiv  = document.createElement('div');
+          pageDiv.className = 'page';
+          pageDiv.style.width  = viewport.width  + 'px';
+          pageDiv.style.height = viewport.height + 'px';
+          container.appendChild(pageDiv);
+
+          const canvas = document.createElement('canvas');
+          canvas.width  = viewport.width;
+          canvas.height = viewport.height;
+          pageDiv.appendChild(canvas);
+
+          page.render({canvasContext:canvas.getContext('2d'),viewport})
+            .promise.then(() => page.getTextContent())
+            .then(textContent => {
+              const textLayer = document.createElement('div');
+              textLayer.className = 'textLayer';
+              pageDiv.appendChild(textLayer);
+              pdfjsLib.renderTextLayer({
+                textContent, container: textLayer,
+                viewport, textDivs: []
+              });
             });
-        </script>
-    </body>
-    </html>
-    ''', pages=pages)
+        });
+      }
+    }).catch(console.error);
+  </script>
+</body>
+</html>
+''', pdf_url=pdf_url)
 
+# ==== Startup ====
 if __name__ == '__main__':
-    # Ensure the initial link is downloaded and model is loaded
-    current_pdf_link = flask_implementation.link
-    current_pdf_path = download_arxiv_pdf(current_pdf_link)
-
-    if not current_pdf_path or not os.path.exists(current_pdf_path):
-        print("❌ Could not download the PDF. Exiting Flask server startup.")
+    if not os.path.exists(current_pdf_path):
+        print("❌ PDF not found:", current_pdf_path)
         exit(1)
-
-    from rag import reload_rag_model
-    reload_rag_model(current_pdf_path)
-
-
-    # Optional: remove this if you're now using /update-pdf instead
-    # threading.Thread(target=monitor_link_changes, daemon=True).start()
-
+    rag.reload_rag_model(current_pdf_path)
     app.run(host='0.0.0.0', port=5001, debug=True)
-
