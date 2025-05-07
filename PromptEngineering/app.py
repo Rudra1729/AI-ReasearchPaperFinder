@@ -17,9 +17,9 @@ from flask_cors import CORS, cross_origin
 import fitz  # PyMuPDF
 
 import rag
-from pdf_from_link import download_arxiv_pdf
 from Research_paper_function import generate_short_query
 from Search_Papers_Arvix import search_arxiv_papers
+from pdf_utils import ensure_pdf_loaded, current_pdf_path, model_loading, download_pdf
 
 # ─── Flask Setup ───────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -28,30 +28,11 @@ CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "*"]}},
      supports_credentials=True)
 logging.basicConfig(level=logging.INFO)
 
-# ─── Global State ──────────────────────────────────────────────────────────────
-# for PDF viewer & RAG:
-current_pdf_link = "https://arxiv.org/pdf/2504.07136"
-downloaded_path  = download_arxiv_pdf(current_pdf_link)
-current_pdf_path = str(Path(downloaded_path).resolve())
 
-# for ArXiv search:
-search_link = current_pdf_link
 
 # ─── PDF + RAG Utility ─────────────────────────────────────────────────────────
 def process_text(selection: str):
     return {"analysis": rag.get_contextual_definition(selection)}
-
-def _download_and_reload(pdf_url: str):
-    global current_pdf_path
-    try:
-        path = download_arxiv_pdf(pdf_url)
-        current_pdf_path = str(Path(path).resolve())
-        rag.reload_rag_model(current_pdf_path)
-        logging.info("✅ Background download & RAG reload complete")
-    except Exception:
-        logging.exception("❌ Background download/reload failed")
-
-def ensure_pdf_loaded(pdf_url: str):
     global current_pdf_link
     if pdf_url != current_pdf_link:
         current_pdf_link = pdf_url
@@ -63,6 +44,11 @@ def ensure_pdf_loaded(pdf_url: str):
 # ─── PDF / RAG Routes ──────────────────────────────────────────────────────────
 @app.route('/pdf')
 def serve_pdf():
+    if model_loading or current_pdf_path is None:
+        # client can retry after a bit
+        return jsonify({"status": "loading"}), 202
+    return send_file(current_pdf_path, mimetype='application/pdf')
+
     return send_file(current_pdf_path, mimetype='application/pdf')
 
 @app.route('/process-selection', methods=['POST'])
@@ -109,7 +95,7 @@ def update_pdf():
 
     # synchronously download + reload
     try:
-        downloaded = download_arxiv_pdf(new_link)
+        downloaded = download_pdf(new_link)
         abs_path   = os.path.abspath(downloaded)
         if not os.path.isfile(abs_path):
             return jsonify(error=f"PDF missing at {abs_path}"), 500
@@ -117,8 +103,6 @@ def update_pdf():
         global current_pdf_link, current_pdf_path
         current_pdf_link = new_link
         current_pdf_path = abs_path
-        logging.info("🗂 Now serving PDF from: %s", current_pdf_path)
-
         rag.reload_rag_model(current_pdf_path)
         logging.info("✅ RAG model reloaded.")
         return jsonify(message="PDF & model updated"), 200
@@ -359,11 +343,12 @@ def log_click():
 
 # ─── Startup ──────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # sanity check your initial PDF
-    if not os.path.exists(current_pdf_path):
-        logging.error("❌ PDF not found: %s", current_pdf_path)
-        sys.exit(1)
+    if __name__ == "__main__":
+    # start the first PDF load (background)
+      DEFAULT_PDF_URL = "https://arxiv.org/pdf/2504.07136"
+      ensure_pdf_loaded(DEFAULT_PDF_URL)
 
-    rag.reload_rag_model(current_pdf_path)
-    app.run()
-# port = 5001
+    # bind to 0.0.0.0:$PORT for Cloud Run (or default 5000 locally)
+      port = int(os.environ.get("PORT", 8080))
+      app.run(host="0.0.0.0", port=port)
+ 
