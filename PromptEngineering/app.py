@@ -1,31 +1,66 @@
-# === Full Flask App with Chatbot & Text Analysis (Enhanced UI with Toggle & Chat History) ===
-
-from flask import Flask, render_template_string, jsonify, request, abort, url_for, send_file
-import subprocess
-import fitz  # PyMuPDF
-import base64
+# app.py
 import os
-import rag
 import sys
-import os
+import logging
+import threading
+import requests
+import subprocess
+import base64
+
 from pathlib import Path
-from flask_cors import CORS
-import flask_implementation
+from flask import (
+    Flask, render_template_string, jsonify, request,
+    abort, url_for, send_file
+)
+from flask_cors import CORS, cross_origin
+
+import fitz  # PyMuPDF
+
+import rag
 from pdf_from_link import download_arxiv_pdf
+from Research_paper_function import generate_short_query
+from Search_Papers_Arvix import search_arxiv_papers
 
+# ─── Flask Setup ───────────────────────────────────────────────────────────────
 app = Flask(__name__)
-CORS(app)
+# allow your React front-end on localhost:3000 (and any same‐origin calls)
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "*"]}},
+     supports_credentials=True)
+logging.basicConfig(level=logging.INFO)
 
-# ==== Global State ====
-current_pdf_link = flask_implementation.link
-downloaded_path   = download_arxiv_pdf(current_pdf_link)
-current_pdf_path  = str(Path(downloaded_path).resolve())
+# ─── Global State ──────────────────────────────────────────────────────────────
+# for PDF viewer & RAG:
+current_pdf_link = "https://arxiv.org/pdf/2504.07136"
+downloaded_path  = download_arxiv_pdf(current_pdf_link)
+current_pdf_path = str(Path(downloaded_path).resolve())
 
-# ==== Utility / RAG Interface ====
-def process_text(selection):
+# for ArXiv search:
+search_link = current_pdf_link
+
+# ─── PDF + RAG Utility ─────────────────────────────────────────────────────────
+def process_text(selection: str):
     return {"analysis": rag.get_contextual_definition(selection)}
 
-# ==== Routes ====
+def _download_and_reload(pdf_url: str):
+    global current_pdf_path
+    try:
+        path = download_arxiv_pdf(pdf_url)
+        current_pdf_path = str(Path(path).resolve())
+        rag.reload_rag_model(current_pdf_path)
+        logging.info("✅ Background download & RAG reload complete")
+    except Exception:
+        logging.exception("❌ Background download/reload failed")
+
+def ensure_pdf_loaded(pdf_url: str):
+    global current_pdf_link
+    if pdf_url != current_pdf_link:
+        current_pdf_link = pdf_url
+        threading.Thread(
+            target=_download_and_reload, args=(pdf_url,), daemon=True
+        ).start()
+        logging.info(f"🔄 Started background PDF download & reload for {pdf_url}")
+
+# ─── PDF / RAG Routes ──────────────────────────────────────────────────────────
 @app.route('/pdf')
 def serve_pdf():
     return send_file(current_pdf_path, mimetype='application/pdf')
@@ -33,61 +68,64 @@ def serve_pdf():
 @app.route('/process-selection', methods=['POST'])
 def handle_selection():
     data      = request.get_json(silent=True) or {}
-    selection = data.get('text', '').strip()
+    selection = data.get('text','').strip()
     if not selection:
-        return jsonify({"error": "Empty selection"}), 400
+        return jsonify(error="Empty selection"), 400
     try:
         return jsonify(process_text(selection))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify(error=str(e)), 500
 
 @app.route('/ask', methods=['POST'])
 def ask_question():
     data     = request.get_json(silent=True) or {}
-    question = data.get('question', '').strip()
+    question = data.get('question','').strip()
+    pdf_url  = data.get('pdfUrl', current_pdf_link).strip()
+
     if not question:
-        return jsonify({"error": "Question cannot be empty"}), 400
+        return jsonify(error="Question cannot be empty"), 400
+
+    # if client passed a new URL, start loading it:
+    ensure_pdf_loaded(pdf_url)
+
+    # simple “please wait” while background model reloads:
+    # you could track a flag if you like; omitted here for brevity
+
     try:
         answer = rag.chat_with_doc(question)
-        return jsonify({"answer": answer})
+        return jsonify(answer=answer)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify(error=str(e)), 500
 
-@app.route('/update-pdf', methods=['POST', 'OPTIONS'])
+@app.route('/update-pdf', methods=['POST','OPTIONS'])
 def update_pdf():
-    # Handle CORS preflight
     if request.method == 'OPTIONS':
         return '', 200
 
-    data = request.get_json(silent=True) or {}
-    new_link = data.get('link')
+    data    = request.get_json(silent=True) or {}
+    new_link= data.get('link','').strip()
     if not new_link:
-        return jsonify(error="Missing 'link' in request data"), 400
+        return jsonify(error="Missing 'link'"), 400
 
-    # Download — get back a path, which may be absolute or relative to CWD
-    downloaded = download_arxiv_pdf(new_link)
-    if not downloaded:
-        return jsonify(error="Download failed"), 500
-
-    # Resolve to an absolute path (but don’t prepend __file__ again)
-    abs_path = downloaded if os.path.isabs(downloaded) else os.path.abspath(downloaded)
-    if not os.path.isfile(abs_path):
-        return jsonify(error=f"PDF not found at {abs_path}"), 500
-
-    # Update globals and reload RAG
-    global current_pdf_link, current_pdf_path
-    current_pdf_link = new_link
-    current_pdf_path = abs_path
-    print("🗂  Now serving PDF from:", current_pdf_path)
-
+    # synchronously download + reload
     try:
-        rag.reload_rag_model(current_pdf_path)
-        print("✅ RAG model reloaded successfully.")
-    except Exception as e:
-        print("❌ RAG reload error:", e, file=sys.stderr)
-        return jsonify(error=f"RAG reload error: {e}"), 500
+        downloaded = download_arxiv_pdf(new_link)
+        abs_path   = os.path.abspath(downloaded)
+        if not os.path.isfile(abs_path):
+            return jsonify(error=f"PDF missing at {abs_path}"), 500
 
-    return jsonify(message="PDF & model updated successfully"), 200
+        global current_pdf_link, current_pdf_path
+        current_pdf_link = new_link
+        current_pdf_path = abs_path
+        logging.info("🗂 Now serving PDF from: %s", current_pdf_path)
+
+        rag.reload_rag_model(current_pdf_path)
+        logging.info("✅ RAG model reloaded.")
+        return jsonify(message="PDF & model updated"), 200
+
+    except Exception as e:
+        logging.exception("Error updating PDF")
+        return jsonify(error=str(e)), 500
 
 @app.route('/')
 def pdf_viewer():
@@ -292,10 +330,40 @@ def pdf_viewer():
 </html>
 ''', pdf_url=pdf_url)
 
-# ==== Startup ====
-if __name__ == '__main__':
+# ─── ArXiv Search / Log-Cick Routes ────────────────────────────────────────────
+@app.route("/search", methods=["POST"])
+@cross_origin()
+def search_arxiv():
+    data       = request.get_json(silent=True) or {}
+    searchTerm = data.get('searchTerm','').strip()
+    if not searchTerm:
+        return jsonify(error="Missing searchTerm"), 400
+
+    # 1) shorten prompt, 2) run arxiv query
+    short_q = generate_short_query(searchTerm)
+    results = search_arxiv_papers(short_q)
+    return jsonify(results=results, user_prompt=searchTerm)
+
+@app.route("/log-click", methods=["POST"])
+@cross_origin()
+def log_click():
+    data = request.get_json(silent=True) or {}
+    url  = data.get('url','').strip()
+    title= data.get('title','').strip()
+    if url:
+        global search_link
+        search_link = url
+        logging.info("User clicked on: %s - %s", title, url)
+        return jsonify(message="Click logged"), 200
+    return jsonify(error="Missing url/title"), 400
+
+# ─── Startup ──────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    # sanity check your initial PDF
     if not os.path.exists(current_pdf_path):
-        print("❌ PDF not found:", current_pdf_path)
-        exit(1)
+        logging.error("❌ PDF not found: %s", current_pdf_path)
+        sys.exit(1)
+
     rag.reload_rag_model(current_pdf_path)
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run()
+# port = 5001

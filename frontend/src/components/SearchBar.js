@@ -14,7 +14,7 @@ const SearchBar = () => {
     console.log("Searching for:", searchTerm);
 
     try {
-      const response = await fetch("http://127.0.0.1:5050/search", {
+      const response = await fetch("http://127.0.0.1:5001/search", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

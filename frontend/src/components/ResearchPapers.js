@@ -14,7 +14,7 @@
 
     const handleLinkClick = (paper) => {
     // Step 1: Log the click
-    fetch("http://localhost:5050/log-click", {
+    fetch("http://localhost:5001/log-click", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
