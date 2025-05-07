@@ -1,4 +1,4 @@
-from rag import chat_with_doc  # Reusing your RAG function
+from PromptEngineering.rag import chat_with_doc  # Reusing your RAG function
 
 def start_chat():
     print("Welcome to the RAG-powered Chatbot! You can ask questions about your research document.")

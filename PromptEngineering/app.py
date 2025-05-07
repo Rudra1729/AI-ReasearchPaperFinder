@@ -10,7 +10,6 @@ import sys
 import os
 from pathlib import Path
 from flask_cors import CORS
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import flask_implementation
 from pdf_from_link import download_arxiv_pdf
 
