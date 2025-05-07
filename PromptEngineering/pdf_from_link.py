@@ -10,7 +10,7 @@ import os
 from urllib.parse import urlparse
 from pathvalidate import sanitize_filename  # install via: pip install pathvalidate
 
-def download_arxiv_pdf(arxiv_url, save_dir="PromptEngineering/RAG Model"):
+def download_arxiv_pdf(arxiv_url, save_dir="PromptEngineering"):
     os.makedirs(save_dir, exist_ok=True)
     
     # Extract identifier or fallback to using full URL
