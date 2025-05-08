@@ -16,7 +16,7 @@ from flask_cors import CORS, cross_origin
 
 import fitz  # PyMuPDF
 
-import rag
+from rag import reload_rag_model, get_contextual_definition, chat_with_doc
 from Research_paper_function import generate_short_query
 from Search_Papers_Arvix import search_arxiv_papers
 from pdf_utils import ensure_pdf_loaded, current_pdf_path, model_loading, download_pdf
@@ -32,14 +32,7 @@ logging.basicConfig(level=logging.INFO)
 
 # ─── PDF + RAG Utility ─────────────────────────────────────────────────────────
 def process_text(selection: str):
-    return {"analysis": rag.get_contextual_definition(selection)}
-    global current_pdf_link
-    if pdf_url != current_pdf_link:
-        current_pdf_link = pdf_url
-        threading.Thread(
-            target=_download_and_reload, args=(pdf_url,), daemon=True
-        ).start()
-        logging.info(f"🔄 Started background PDF download & reload for {pdf_url}")
+    return {"analysis": get_contextual_definition(selection)}
 
 # ─── PDF / RAG Routes ──────────────────────────────────────────────────────────
 @app.route('/pdf')
@@ -47,8 +40,6 @@ def serve_pdf():
     if model_loading or current_pdf_path is None:
         # client can retry after a bit
         return jsonify({"status": "loading"}), 202
-    return send_file(current_pdf_path, mimetype='application/pdf')
-
     return send_file(current_pdf_path, mimetype='application/pdf')
 
 @app.route('/process-selection', methods=['POST'])
@@ -78,7 +69,7 @@ def ask_question():
     # you could track a flag if you like; omitted here for brevity
 
     try:
-        answer = rag.chat_with_doc(question)
+        answer = chat_with_doc(question)
         return jsonify(answer=answer)
     except Exception as e:
         return jsonify(error=str(e)), 500
@@ -103,7 +94,7 @@ def update_pdf():
         global current_pdf_link, current_pdf_path
         current_pdf_link = new_link
         current_pdf_path = abs_path
-        rag.reload_rag_model(current_pdf_path)
+        reload_rag_model(current_pdf_path)
         logging.info("✅ RAG model reloaded.")
         return jsonify(message="PDF & model updated"), 200
 
@@ -343,12 +334,6 @@ def log_click():
 
 # ─── Startup ──────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    if __name__ == "__main__":
-    # start the first PDF load (background)
-      DEFAULT_PDF_URL = "https://arxiv.org/pdf/2504.07136"
-      ensure_pdf_loaded(DEFAULT_PDF_URL)
-
-    # bind to 0.0.0.0:$PORT for Cloud Run (or default 5000 locally)
       port = int(os.environ.get("PORT", 8080))
       app.run(host="0.0.0.0", port=port)
  
