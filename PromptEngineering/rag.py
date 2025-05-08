@@ -1,13 +1,18 @@
 # RAG model implementation
-
+import logging
 import google.generativeai as genai
 from chromadb import Documents, EmbeddingFunction, Embeddings
 from google.api_core import retry
 import chromadb
 from data_extraction import extract_sections
 from API_KEY import API_KEY
+import os
 
-genai.configure(api_key= API_KEY )
+logging.basicConfig(level=logging.INFO)
+genai.configure(api_key=API_KEY)
+
+chroma_client = chromadb.Client()
+db = None
 
 def create_documents_from_dict(topic_text_dict):
     documents = []
@@ -18,16 +23,6 @@ def create_documents_from_dict(topic_text_dict):
         documents.append(document)
     
     return documents
-
-topic_text_dict = extract_sections("PromptEngineering/Research.pdf")
-# Generate list of documents
-documents = create_documents_from_dict(topic_text_dict)
-
-# Output
-'''
-for i, doc in enumerate(documents):
-    print(f"Document {i+1}:\n{doc}\n")
-'''
 
 class GeminiEmbeddingFunction(EmbeddingFunction):
     # Specify whether to generate embeddings for documents, or queries
@@ -49,10 +44,6 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
         )
         return response["embedding"]
 
-# Initialize ChromaDB collection (keep existing DB setup code)
-chroma_client = chromadb.Client()
-db = chroma_client.get_or_create_collection(name="googlecardb", embedding_function=GeminiEmbeddingFunction())
-db.add(documents=documents, ids=[str(i) for i in range(len(documents))])
 
 def get_contextual_definition(highlighted_text):
     search_term = highlighted_text.strip()
@@ -94,22 +85,27 @@ for highlighted_text in clipboard_highight_monitor():
     print(get_contextual_definition(highlighted_text))
 '''
 
-def reload_rag_model(pdf_path="PromptEngineering/RAG Model/Research.pdf"):
+def reload_rag_model(pdf_path: str = None) -> None:
+    """
+    Build or rebuild the Chroma collection from scratch.
+    """
     global db
+    try:
+        chroma_client.delete_collection("googlecardb")
+        logging.info("Deleted existing collection.")
+    except:
+        logging.info("No existing collection to delete; continuing.")
 
-    # Drop the existing collection
-    chroma_client.delete_collection("googlecardb")
-
-    # Recreate a fresh one
     db = chroma_client.get_or_create_collection(
-        name="googlecardb", embedding_function=GeminiEmbeddingFunction()
+        name="googlecardb",
+        embedding_function=GeminiEmbeddingFunction()
     )
 
+    # Extract text sections & ingest
     topic_text_dict = extract_sections(pdf_path)
-    documents = create_documents_from_dict(topic_text_dict)
-
-    db.add(documents=documents, ids=[str(i) for i in range(len(documents))])
-    print("✅ RAG model reset and reloaded from updated PDF.")
+    docs = create_documents_from_dict(topic_text_dict)
+    db.add(documents=docs, ids=[str(i) for i in range(len(docs))])
+    logging.info(f"✅ RAG model reset from '{pdf_path}', {len(docs)} docs loaded.")
 
 
 def chat_with_doc(user_question):
@@ -126,10 +122,6 @@ Answer casually and clearly, but stay factually accurate and refer only to the p
 Here is the passage: {passage.replace('\n', ' ')}
 Question: {query}
 Answer:"""
-
-    model = genai.GenerativeModel("gemini-1.5-flash-latest")
-    response = model.generate_content(prompt)
-    return response.text
 
     model = genai.GenerativeModel("gemini-1.5-flash-latest")
     response = model.generate_content(prompt)
