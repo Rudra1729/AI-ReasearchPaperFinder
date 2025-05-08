@@ -13,8 +13,8 @@ current_pdf_path = None
 model_loading   = False
 
 def download_pdf(url: str, timeout: int = 15) -> str:
-    tmp_dir = "/tmp/pdfs"
-    os.makedirs(tmp_dir, exist_ok=True)
+    shutil.rmtree('pdfs')
+    os.makedirs("pdfs", exist_ok=True)
     safe_name = re.sub(r'\W+', '_', url)[:50] + ".pdf"
     local_path = os.path.join("pdfs", safe_name)
     if os.path.exists(local_path):
@@ -22,7 +22,7 @@ def download_pdf(url: str, timeout: int = 15) -> str:
     logging.info(f"Downloading PDF from {url}")
     resp = requests.get(url, timeout=timeout)
     resp.raise_for_status()
-    with open(local_path, "wb") as f:
+    with open(local_path, "wb") as f:   
         f.write(resp.content)
     return local_path
 
