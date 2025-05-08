@@ -4,6 +4,7 @@ import re
 import logging
 import threading
 import requests
+import shutil
 
 from rag import reload_rag_model   # wherever your reload logic lives
 
