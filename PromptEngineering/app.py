@@ -62,12 +62,6 @@ def ask_question():
     if not question:
         return jsonify(error="Question cannot be empty"), 400
 
-    # if client passed a new URL, start loading it:
-    ensure_pdf_loaded(pdf_url)
-
-    # simple “please wait” while background model reloads:
-    # you could track a flag if you like; omitted here for brevity
-
     try:
         answer = chat_with_doc(question)
         return jsonify(answer=answer)
