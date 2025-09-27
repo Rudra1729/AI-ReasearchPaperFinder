@@ -74,7 +74,7 @@ Passage: {passage.replace('\n', ' ')}
 
     
     # Generate and return answer
-    model = genai.GenerativeModel("gemini-1.5-flash-latest")
+    model = genai.GenerativeModel("gemini-2.5-flash-lite")
     response = model.generate_content(prompt)
     s = f"\nContextual meaning of '{search_term}':"
     return(s + response.text)
@@ -123,6 +123,6 @@ Here is the passage: {passage.replace('\n', ' ')}
 Question: {query}
 Answer:"""
 
-    model = genai.GenerativeModel("gemini-1.5-flash-latest")
+    model = genai.GenerativeModel("gemini-2.5-flash-lite")
     response = model.generate_content(prompt)
     return response.text
