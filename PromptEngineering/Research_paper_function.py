@@ -14,7 +14,7 @@ load_dotenv()
 genai.configure(api_key=API_KEY)
 
 model = genai.GenerativeModel(
-    'gemini-1.5-flash-latest',
+    'gemini-2.5-flash-lite',
     generation_config=genai.GenerationConfig(
         temperature=0.7,
         top_p=1,
